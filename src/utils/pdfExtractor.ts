@@ -12,6 +12,30 @@ export interface ExtractedPdfResult {
   pageCount: number;
   fullText: string;
   pages: PageContent[];
+  hasExtractableText: boolean;
+  totalExtractedCharacters: number;
+  ocrNotice?: string;
+}
+
+/**
+ * Safely clean up whitespace and line artifacts while preserving legal words and text structure.
+ * Fixes hyphens split across line wraps (e.g., "dis- missed" -> "dismissed").
+ */
+export function cleanExtractedText(text: string): string {
+  if (!text) return '';
+
+  return text
+    // Replace hyphenated line breaks (e.g., "judg-\nment" or "judg- ment") with united word
+    .replace(/(\b[A-Za-z]{2,})-\s+([a-z]{2,}\b)/g, '$1$2')
+    // Normalize unicode quotes and dashes commonly present in court PDFs
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    // Replace multiple spaces or tabs with single space
+    .replace(/[ \t]+/g, ' ')
+    // Collapse more than two consecutive line breaks
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -21,31 +45,44 @@ export async function extractTextFromPdf(
   file: File,
   onProgress?: (progressMsg: string, percent: number) => void
 ): Promise<ExtractedPdfResult> {
+  // 1. File size check (25MB limit)
+  const maxBytes = 25 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error(
+      `File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds the 25MB upload limit. Please upload an official judgment document under 25MB.`
+    );
+  }
+
   const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
+  // Text fallback for plain court transcripts or text files
   if (!isPdf) {
-    // Text fallback for plain court transcripts or plain text judgments
     onProgress?.('Reading text document content...', 40);
-    const text = await file.text();
+    const rawText = await file.text();
     onProgress?.('Partitioning document segments...', 90);
-    
-    // Split into simulated pages by character count or form-feed markers if present
-    const pageChunks = text.split(/\f|\n{3,}/).filter(chunk => chunk.trim().length > 0);
+
+    const cleaned = cleanExtractedText(rawText);
+    const pageChunks = cleaned.split(/\f|\n{3,}/).filter(chunk => chunk.trim().length > 0);
     const pages: PageContent[] = pageChunks.length > 0
-      ? pageChunks.map((chunk, idx) => ({ pageNumber: idx + 1, text: chunk.trim() }))
-      : [{ pageNumber: 1, text: text.trim() }];
+      ? pageChunks.map((chunk, idx) => ({ pageNumber: idx + 1, text: cleanExtractedText(chunk) }))
+      : [{ pageNumber: 1, text: cleaned }];
+
+    const hasText = cleaned.length > 20;
 
     return {
       fileName: file.name,
       fileSize: file.size,
       pageCount: pages.length,
-      fullText: text,
+      fullText: cleaned,
       pages,
+      hasExtractableText: hasText,
+      totalExtractedCharacters: cleaned.length,
+      ocrNotice: hasText ? undefined : 'The uploaded text file does not contain readable characters.',
     };
   }
 
   // Handle PDF using PDF.js
-  onProgress?.('Loading PDF document structure...', 20);
+  onProgress?.('Loading PDF document structure...', 15);
   const arrayBuffer = await file.arrayBuffer();
 
   try {
@@ -60,27 +97,43 @@ export async function extractTextFromPdf(
     const pageCount = pdfDoc.numPages;
     const pages: PageContent[] = [];
     let combinedText = '';
+    let totalExtractedCharacters = 0;
 
     for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-      const percent = Math.round(20 + (pageNum / pageCount) * 70);
+      const percent = Math.round(15 + (pageNum / pageCount) * 75);
       onProgress?.(`Extracting text from Page ${pageNum} of ${pageCount}...`, percent);
 
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
-      
+
       const pageStrings = textContent.items
         .map((item: any) => ('str' in item ? item.str : ''))
         .filter(str => str.trim().length > 0);
 
-      const pageText = pageStrings.join(' ').replace(/\s+/g, ' ').trim();
+      const rawPageText = pageStrings.join(' ');
+      const cleanedPageText = cleanExtractedText(rawPageText);
+
       pages.push({
         pageNumber: pageNum,
-        text: pageText,
+        text: cleanedPageText,
       });
-      combinedText += (combinedText ? '\n\n' : '') + `--- Page ${pageNum} ---\n` + pageText;
+
+      totalExtractedCharacters += cleanedPageText.length;
+      combinedText += (combinedText ? '\n\n' : '') + `--- Page ${pageNum} ---\n` + cleanedPageText;
     }
 
-    onProgress?.('Text extraction completed successfully.', 100);
+    onProgress?.('Verifying extractable digital text layer...', 95);
+
+    // Check if document contains extractable text or is a scanned image PDF
+    const avgCharsPerPage = pageCount > 0 ? totalExtractedCharacters / pageCount : 0;
+    const hasExtractableText = totalExtractedCharacters >= 40 && avgCharsPerPage >= 15;
+
+    let ocrNotice: string | undefined = undefined;
+    if (!hasExtractableText) {
+      ocrNotice = `This PDF appears to be a scanned image-only document or contains no extractable text layer (${totalExtractedCharacters} total characters across ${pageCount} pages). CaseVeda AI requires digital text for legal fact extraction. Optical Character Recognition (OCR) is not currently available client-side without an external OCR service.`;
+    }
+
+    onProgress?.('Text extraction completed.', 100);
 
     return {
       fileName: file.name,
@@ -88,11 +141,14 @@ export async function extractTextFromPdf(
       pageCount,
       fullText: combinedText,
       pages,
+      hasExtractableText,
+      totalExtractedCharacters,
+      ocrNotice,
     };
   } catch (error: any) {
     console.error('PDF.js text extraction error:', error);
     throw new Error(
-      `Failed to extract text from "${file.name}". ${error?.message || 'The PDF might be password-protected or contain scanned bitmap images requiring OCR.'}`
+      `Failed to parse PDF document "${file.name}". ${error?.message || 'The PDF might be corrupted, password-protected, or formatted improperly.'}`
     );
   }
 }

@@ -7,6 +7,8 @@ export const SAMPLE_JUDGMENTS: CourtJudgment[] = [
     fileSize: 482100,
     analyzedAt: '2026-10-09T14:32:00.000Z',
     pageCount: 14,
+    hasExtractableText: true,
+    isDemo: true,
     rawText: `IN THE SUPREME COURT OF INDIA\nCRIMINAL APPELLATE JURISDICTION\nCRIMINAL APPEAL NO. 784 OF 2023...`,
     pages: [
       {
@@ -16,9 +18,9 @@ CRIMINAL APPELLATE JURISDICTION
 CRIMINAL APPEAL NO. 784 OF 2023
 (Arising out of SLP (Crl.) No. 2419 of 2022)
 
-Rajesh Kumar Sharma & Ors.                      ... Appellant(s)
-                            VERSUS
-State of NCT of Delhi                           ... Respondent(s)
+Rajesh Kumar Sharma & Ors. ... Appellant(s)
+VERSUS
+State of NCT of Delhi ... Respondent(s)
 
 CORAM:
 HON'BLE MR. JUSTICE SANJAY KISHAN KAUL
@@ -69,21 +71,21 @@ OCTOBER 09, 2023.`
         value: 'Supreme Court of India',
         confidence: 98,
         pageNumber: 1,
-        evidenceQuote: 'IN THE SUPREME COURT OF INDIA CRIMINAL APPELLATE JURISDICTION',
+        evidenceQuote: 'IN THE SUPREME COURT OF INDIA',
         status: 'Verified',
       },
       caseType: {
         value: 'Criminal Appeal',
         confidence: 96,
         pageNumber: 1,
-        evidenceQuote: 'CRIMINAL APPEAL NO. 784 OF 2023 (Arising out of SLP (Crl.) No. 2419 of 2022)',
+        evidenceQuote: 'CRIMINAL APPEAL NO. 784 OF 2023',
         status: 'Verified',
       },
       caseNumber: {
         value: 'Criminal Appeal No. 784 of 2023',
         confidence: 96,
         pageNumber: 1,
-        evidenceQuote: 'CRIMINAL APPEAL NO. 784 OF 2023 (Arising out of SLP (Crl.) No. 2419 of 2022)',
+        evidenceQuote: 'CRIMINAL APPEAL NO. 784 OF 2023',
         status: 'Verified',
       },
       year: {
@@ -94,24 +96,24 @@ OCTOBER 09, 2023.`
         status: 'Verified',
       },
       bench: {
-        value: "Hon'ble Mr. Justice Sanjay Kishan Kaul, Hon'ble Mr. Justice Abhay S. Oka",
-        confidence: 94,
+        value: "Hon'ble Justice SANJAY KISHAN KAUL, Hon'ble Justice ABHAY S. OKA",
+        confidence: 95,
         pageNumber: 1,
-        evidenceQuote: "CORAM: HON'BLE MR. JUSTICE SANJAY KISHAN KAUL, HON'BLE MR. JUSTICE ABHAY S. OKA",
+        evidenceQuote: "HON'BLE MR. JUSTICE SANJAY KISHAN KAUL\nHON'BLE MR. JUSTICE ABHAY S. OKA",
         status: 'Verified',
       },
       petitioner: {
         value: 'Rajesh Kumar Sharma & Ors.',
-        confidence: 95,
+        confidence: 96,
         pageNumber: 1,
         evidenceQuote: 'Rajesh Kumar Sharma & Ors. ... Appellant(s)',
         status: 'Verified',
       },
       respondent: {
         value: 'State of NCT of Delhi',
-        confidence: 95,
+        confidence: 96,
         pageNumber: 1,
-        evidenceQuote: 'VERSUS State of NCT of Delhi ... Respondent(s)',
+        evidenceQuote: 'State of NCT of Delhi ... Respondent(s)',
         status: 'Verified',
       },
       actsAndSections: [
@@ -129,7 +131,7 @@ OCTOBER 09, 2023.`
           section: 'Section 34',
           description: 'Acts done by several persons in furtherance of common intention.',
           pageNumber: 2,
-          quote: 'conviction of the appellants under Section 302 read with Section 34 of the Indian Penal Code, 1860 (IPC).',
+          quote: 'upholding the conviction of the appellants under Section 302 read with Section 34 of the Indian Penal Code, 1860 (IPC).',
           confidence: 96,
           status: 'Verified',
         },
@@ -154,11 +156,12 @@ OCTOBER 09, 2023.`
       ],
       finalOutcome: {
         disposition: 'Appeal Allowed',
-        verdictText: 'In the result, the appeal is allowed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 read with Section 34 of the IPC is hereby quashed and set aside. The appellants are acquitted of all charges.',
+        verdictText: 'In the result, the appeal is allowed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 read with Section 34 of the Indian Penal Code, 1860 is hereby quashed and set aside.',
         pageNumber: 14,
-        evidenceQuote: 'In the result, the appeal is allowed. The impugned judgment and order of conviction... is hereby quashed and set aside. The appellants are acquitted of all charges.',
+        evidenceQuote: 'In the result, the appeal is allowed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 read with Section 34 of the Indian Penal Code, 1860 is hereby quashed and set aside.',
         confidence: 98,
         status: 'Verified',
+        orderType: 'Final Judgment',
       },
       summary: 'Supreme Court Criminal Appeal concerning conviction under IPC Section 302/34. The Supreme Court held that the prosecution failed to establish the unbroken chain of circumstantial evidence beyond reasonable doubt, allowed the appeal, and acquitted all appellants.',
       keyIssues: [
@@ -167,11 +170,12 @@ OCTOBER 09, 2023.`
         'Failure to properly evaluate accused explanations under CrPC 313',
       ],
       operativeOrderText: 'Appeal is allowed. Conviction quashed and set aside. Appellants acquitted.',
+      orderType: 'Final Judgment',
     },
     overallStatus: 'Verified',
     confidenceScore: 96,
     authoritativeSourceChecked: false,
-    notes: 'Reference landmark appeal parsed with verified page citations.',
+    notes: 'Demonstration Benchmark Landmark Judgment (Supreme Court of India).',
   },
   {
     id: 'sample-delhi-hc-arbitration-2024',
@@ -179,6 +183,8 @@ OCTOBER 09, 2023.`
     fileSize: 312500,
     analyzedAt: '2026-10-10T11:15:00.000Z',
     pageCount: 18,
+    hasExtractableText: true,
+    isDemo: true,
     rawText: `IN THE HIGH COURT OF DELHI AT NEW DELHI\nO.M.P. (COMM) 412/2024...`,
     pages: [
       {
@@ -187,9 +193,9 @@ OCTOBER 09, 2023.`
 (COMMERCIAL DIVISION)
 O.M.P. (COMM) 412/2024 & I.A. 8920/2024
 
-Metro Infra Engineering Ltd.                    ... Petitioner
-                            VERSUS
-Union of India, Ministry of Railways            ... Respondent
+Metro Infra Engineering Ltd. ... Petitioner
+VERSUS
+Union of India, Ministry of Railways ... Respondent
 
 CORAM:
 HON'BLE MR. JUSTICE PRATEEK JALAN
@@ -222,49 +228,49 @@ OCTOBER 10, 2024.`
         value: 'High Court of Delhi',
         confidence: 97,
         pageNumber: 1,
-        evidenceQuote: 'IN THE HIGH COURT OF DELHI AT NEW DELHI (COMMERCIAL DIVISION)',
+        evidenceQuote: 'IN THE HIGH COURT OF DELHI AT NEW DELHI',
         status: 'Verified',
       },
       caseType: {
         value: 'Arbitration Petition',
         confidence: 94,
         pageNumber: 1,
-        evidenceQuote: 'O.M.P. (COMM) 412/2024 & I.A. 8920/2024',
+        evidenceQuote: 'O.M.P. (COMM) 412/2024',
         status: 'Verified',
       },
       caseNumber: {
         value: 'O.M.P. (COMM) 412/2024',
         confidence: 95,
         pageNumber: 1,
-        evidenceQuote: 'O.M.P. (COMM) 412/2024 & I.A. 8920/2024',
+        evidenceQuote: 'O.M.P. (COMM) 412/2024',
         status: 'Verified',
       },
       year: {
         value: '2024',
         confidence: 96,
         pageNumber: 1,
-        evidenceQuote: '412/2024',
+        evidenceQuote: 'O.M.P. (COMM) 412/2024',
         status: 'Verified',
       },
       bench: {
-        value: "Hon'ble Mr. Justice Prateek Jalan",
+        value: "Hon'ble Justice PRATEEK JALAN",
         confidence: 95,
         pageNumber: 1,
-        evidenceQuote: "CORAM: HON'BLE MR. JUSTICE PRATEEK JALAN",
+        evidenceQuote: "HON'BLE MR. JUSTICE PRATEEK JALAN",
         status: 'Verified',
       },
       petitioner: {
         value: 'Metro Infra Engineering Ltd.',
-        confidence: 94,
+        confidence: 95,
         pageNumber: 1,
         evidenceQuote: 'Metro Infra Engineering Ltd. ... Petitioner',
         status: 'Verified',
       },
       respondent: {
         value: 'Union of India, Ministry of Railways',
-        confidence: 94,
+        confidence: 95,
         pageNumber: 1,
-        evidenceQuote: 'VERSUS Union of India, Ministry of Railways ... Respondent',
+        evidenceQuote: 'Union of India, Ministry of Railways ... Respondent',
         status: 'Verified',
       },
       actsAndSections: [
@@ -285,6 +291,7 @@ OCTOBER 10, 2024.`
         evidenceQuote: 'Consequently, the petition is dismissed with no order as to costs. All pending applications stand disposed of.',
         confidence: 96,
         status: 'Verified',
+        orderType: 'Final Judgment',
       },
       summary: 'Delhi High Court commercial challenge under Section 34 of the Arbitration Act. The Court held that the arbitral award did not suffer from patent illegality or perversity, refusing to reassess factual findings and dismissed the petition.',
       keyIssues: [
@@ -293,6 +300,7 @@ OCTOBER 10, 2024.`
         'Standard of patent illegality post-2015 amendments',
       ],
       operativeOrderText: 'Petition under Section 34 dismissed. Award upheld.',
+      orderType: 'Final Judgment',
     },
     overallStatus: 'Verified',
     confidenceScore: 95,
@@ -305,6 +313,8 @@ OCTOBER 10, 2024.`
     fileSize: 483900,
     analyzedAt: '2026-10-11T09:20:00.000Z',
     pageCount: 14,
+    hasExtractableText: true,
+    isDemo: true,
     rawText: `IN THE SUPREME COURT OF INDIA\nCRIMINAL APPEAL NO. 784 OF 2023...`,
     pages: [
       {
@@ -313,9 +323,9 @@ OCTOBER 10, 2024.`
 CRIMINAL APPELLATE JURISDICTION
 CRIMINAL APPEAL NO. 784 OF 2023
 
-Rajesh Kumar Sharma & Ors.                      ... Appellant(s)
-                            VERSUS
-State of NCT of Delhi                           ... Respondent(s)
+Rajesh Kumar Sharma & Ors. ... Appellant(s)
+VERSUS
+State of NCT of Delhi ... Respondent(s)
 
 CORAM:
 HON'BLE MR. JUSTICE SANJAY KISHAN KAUL
@@ -325,9 +335,7 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
         pageNumber: 14,
         text: `25. In the result, the appeal is dismissed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 of the Indian Penal Code, 1860 is hereby upheld and confirmed.
 
-26. The appellants shall surrender forthwith to undergo the remainder of their sentence.
-
-(ALTERED OPERATIVE DISPOSITION FOR COMPARISON TEST)`
+26. The appellants shall surrender forthwith to undergo the remainder of their sentence.`
       }
     ],
     extractedData: {
@@ -356,14 +364,14 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
         value: '2023',
         confidence: 98,
         pageNumber: 1,
-        evidenceQuote: '2023',
+        evidenceQuote: 'CRIMINAL APPEAL NO. 784 OF 2023',
         status: 'Verified',
       },
       bench: {
-        value: "Hon'ble Mr. Justice Sanjay Kishan Kaul, Hon'ble Mr. Justice Abhay S. Oka",
+        value: "Hon'ble Justice SANJAY KISHAN KAUL, Hon'ble Justice ABHAY S. OKA",
         confidence: 94,
         pageNumber: 1,
-        evidenceQuote: "CORAM: HON'BLE MR. JUSTICE SANJAY KISHAN KAUL",
+        evidenceQuote: "HON'BLE MR. JUSTICE SANJAY KISHAN KAUL",
         status: 'Verified',
       },
       petitioner: {
@@ -377,7 +385,7 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
         value: 'State of NCT of Delhi',
         confidence: 95,
         pageNumber: 1,
-        evidenceQuote: 'VERSUS State of NCT of Delhi ... Respondent(s)',
+        evidenceQuote: 'State of NCT of Delhi ... Respondent(s)',
         status: 'Verified',
       },
       actsAndSections: [
@@ -386,22 +394,24 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
           section: 'Section 302',
           description: 'Punishment for murder (Capital punishment or life imprisonment and fine).',
           pageNumber: 14,
-          quote: 'conviction passed by the High Court of Delhi under Section 302 of the Indian Penal Code, 1860 is hereby upheld',
+          quote: 'conviction passed by the High Court of Delhi under Section 302 of the Indian Penal Code, 1860 is hereby upheld and confirmed.',
           confidence: 96,
           status: 'Verified',
         },
       ],
       finalOutcome: {
-        disposition: 'Appeal Dismissed', // TAMPERED FROM 'Appeal Allowed'
-        verdictText: 'In the result, the appeal is dismissed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 of the IPC is hereby upheld and confirmed.',
+        disposition: 'Appeal Dismissed',
+        verdictText: 'In the result, the appeal is dismissed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 of the Indian Penal Code, 1860 is hereby upheld and confirmed.',
         pageNumber: 14,
-        evidenceQuote: 'In the result, the appeal is dismissed. The impugned judgment and order of conviction... is hereby upheld and confirmed.',
+        evidenceQuote: 'In the result, the appeal is dismissed. The impugned judgment and order of conviction passed by the High Court of Delhi under Section 302 of the Indian Penal Code, 1860 is hereby upheld and confirmed.',
         confidence: 95,
         status: 'Verified',
+        orderType: 'Final Judgment',
       },
-      summary: 'DISCREPANCY TEST FILE: A modified version where the operative outcome paragraph was altered from "Appeal Allowed" to "Appeal Dismissed" to demonstrate the document comparison mismatch engine.',
+      summary: 'DEMO MISMATCH DOCUMENT: Operative outcome intentionally modified from "Appeal Allowed" to "Appeal Dismissed" to test discrepancy detection.',
       keyIssues: ['Document comparison testing', 'Tampering detection demonstration'],
       operativeOrderText: 'Appeal is dismissed. Conviction upheld.',
+      orderType: 'Final Judgment',
     },
     overallStatus: 'Verified',
     confidenceScore: 92,
@@ -414,6 +424,8 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
     fileSize: 254800,
     analyzedAt: '2026-10-08T16:45:00.000Z',
     pageCount: 11,
+    hasExtractableText: true,
+    isDemo: true,
     rawText: `IN THE HIGH COURT OF JUDICATURE AT BOMBAY\nAPPELLATE SIDE\nCRIMINAL APPEAL NO. 109 OF 2023...`,
     pages: [
       {
@@ -422,9 +434,9 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
 APPELLATE SIDE
 CRIMINAL APPEAL NO. 109 OF 2023
 
-Apex Finvest & Capital Services Pvt. Ltd.        ... Appellant
-                            VERSUS
-Sunita Ramesh Patil & Anr.                      ... Respondents
+Apex Finvest & Capital Services Pvt. Ltd. ... Appellant
+VERSUS
+Sunita Ramesh Patil & Anr. ... Respondents
 
 CORAM:
 HON'BLE SMT. JUSTICE BHARATI DANGRE`
@@ -451,7 +463,7 @@ OCTOBER 08, 2023.`
         value: 'High Court of Judicature at Bombay',
         confidence: 97,
         pageNumber: 1,
-        evidenceQuote: 'IN THE HIGH COURT OF JUDICATURE AT BOMBAY APPELLATE SIDE',
+        evidenceQuote: 'IN THE HIGH COURT OF JUDICATURE AT BOMBAY',
         status: 'Verified',
       },
       caseType: {
@@ -472,28 +484,28 @@ OCTOBER 08, 2023.`
         value: '2023',
         confidence: 97,
         pageNumber: 1,
-        evidenceQuote: '2023',
+        evidenceQuote: 'CRIMINAL APPEAL NO. 109 OF 2023',
         status: 'Verified',
       },
       bench: {
-        value: "Hon'ble Smt. Justice Bharati Dangre",
+        value: "Hon'ble Justice BHARATI DANGRE",
         confidence: 94,
         pageNumber: 1,
-        evidenceQuote: "CORAM: HON'BLE SMT. JUSTICE BHARATI DANGRE",
+        evidenceQuote: "HON'BLE SMT. JUSTICE BHARATI DANGRE",
         status: 'Verified',
       },
       petitioner: {
         value: 'Apex Finvest & Capital Services Pvt. Ltd.',
-        confidence: 93,
+        confidence: 94,
         pageNumber: 1,
         evidenceQuote: 'Apex Finvest & Capital Services Pvt. Ltd. ... Appellant',
         status: 'Verified',
       },
       respondent: {
         value: 'Sunita Ramesh Patil & Anr.',
-        confidence: 93,
+        confidence: 94,
         pageNumber: 1,
-        evidenceQuote: 'VERSUS Sunita Ramesh Patil & Anr. ... Respondents',
+        evidenceQuote: 'Sunita Ramesh Patil & Anr. ... Respondents',
         status: 'Verified',
       },
       actsAndSections: [
@@ -523,6 +535,7 @@ OCTOBER 08, 2023.`
         evidenceQuote: 'No perversity is shown in the order of acquittal. Consequently, the appeal is dismissed.',
         confidence: 97,
         status: 'Verified',
+        orderType: 'Final Judgment',
       },
       summary: 'Bombay High Court criminal appeal challenging acquittal in a Section 138 NI Act cheque dishonour complaint. The High Court upheld the Magistrate ruling that the accused successfully rebutted the Section 139 presumption, confirming the acquittal.',
       keyIssues: [
@@ -531,19 +544,22 @@ OCTOBER 08, 2023.`
         'Standard of interference in appellate review of acquittal judgments',
       ],
       operativeOrderText: 'Acquittal upheld. Criminal Appeal dismissed.',
+      orderType: 'Final Judgment',
     },
     overallStatus: 'Verified',
     confidenceScore: 95,
     authoritativeSourceChecked: false,
-    notes: 'Negotiable Instruments Act cheque dishonour appeal.',
+    notes: 'Negotiable Instruments Act cheque dishonour appeal benchmark.',
   },
   {
     id: 'sample-uncertain-bail-petition',
-    fileName: 'Pending_Review_BailAppl_Unspecified_2024.pdf',
+    fileName: 'Interim_Order_BailAppl_92_2024.pdf',
     fileSize: 184000,
     analyzedAt: '2026-10-11T08:00:00.000Z',
     pageCount: 4,
-    rawText: `BEFORE THE SESSIONS COURT\nIN THE MATTER OF BAIL APPLICATION NO. 92 OF 2024...`,
+    hasExtractableText: true,
+    isDemo: true,
+    rawText: `IN THE COURT OF ADDITIONAL SESSIONS JUDGE\nIN THE MATTER OF BAIL APPLICATION NO. 92 OF 2024...`,
     pages: [
       {
         pageNumber: 1,
@@ -552,7 +568,7 @@ IN THE MATTER OF BAIL APPLICATION NO. 92 OF 2024
 IN CRIME NO. 410/2023 OF KOTWALI POLICE STATION
 
 Vikramaditya @ Vicky
-                    V/s
+V/s
 State of Uttar Pradesh`
       },
       {
@@ -562,23 +578,22 @@ State of Uttar Pradesh`
     ],
     extractedData: {
       courtName: {
-        value: 'Court of Additional Sessions Judge',
-        confidence: 68,
+        value: 'Court of Sessions / District Court',
+        confidence: 80,
         pageNumber: 1,
         evidenceQuote: 'IN THE COURT OF ADDITIONAL SESSIONS JUDGE',
-        status: 'Needs Review',
-        reviewReason: 'District/Sessions level jurisdiction; exact city bench not declared in header.',
+        status: 'Verified',
       },
       caseType: {
         value: 'Bail Application',
-        confidence: 85,
+        confidence: 88,
         pageNumber: 1,
         evidenceQuote: 'BAIL APPLICATION NO. 92 OF 2024',
         status: 'Verified',
       },
       caseNumber: {
         value: 'Bail Appln. No. 92 of 2024',
-        confidence: 86,
+        confidence: 88,
         pageNumber: 1,
         evidenceQuote: 'BAIL APPLICATION NO. 92 OF 2024',
         status: 'Verified',
@@ -591,45 +606,46 @@ State of Uttar Pradesh`
         status: 'Verified',
       },
       bench: {
-        value: 'Presiding Judge Name Unspecified',
-        confidence: 30,
+        value: 'Presiding Coram not explicitly stated',
+        confidence: 0,
         pageNumber: null,
         evidenceQuote: null,
         status: 'Needs Review',
-        reviewReason: 'Judge name omitted from interim order sheet.',
+        reviewReason: 'Judge designations omitted from title block and concluding signature lines.',
       },
       petitioner: {
         value: 'Vikramaditya @ Vicky',
-        confidence: 78,
+        confidence: 90,
         pageNumber: 1,
-        evidenceQuote: 'Vikramaditya @ Vicky V/s',
-        status: 'Needs Review',
-        reviewReason: 'Alias name detected; parentage and address unstated.',
+        evidenceQuote: 'Vikramaditya @ Vicky V/s State of Uttar Pradesh',
+        status: 'Verified',
       },
       respondent: {
         value: 'State of Uttar Pradesh',
-        confidence: 85,
+        confidence: 90,
         pageNumber: 1,
-        evidenceQuote: 'V/s State of Uttar Pradesh',
+        evidenceQuote: 'Vikramaditya @ Vicky V/s State of Uttar Pradesh',
         status: 'Verified',
       },
       actsAndSections: [],
       finalOutcome: {
-        disposition: 'Needs Review',
-        verdictText: 'Arguments heard in part. List on 25.10.2024 for further consideration on interim protection. No coercive steps till next date.',
+        disposition: 'Interim Order / Stay Granted',
+        verdictText: 'Arguments heard in part. Medical reports of the victim called for. List on 25.10.2024 for further consideration on interim protection. No coercive steps till next date.',
         pageNumber: 4,
-        evidenceQuote: 'Arguments heard in part. List on 25.10.2024 for further consideration on interim protection.',
-        confidence: 45,
+        evidenceQuote: 'Arguments heard in part. Medical reports of the victim called for. List on 25.10.2024 for further consideration on interim protection. No coercive steps till next date.',
+        confidence: 85,
         status: 'Needs Review',
-        reviewReason: 'Interim adjournment order; final bail disposal not yet rendered.',
+        orderType: 'Interim / Procedural Order',
+        reviewReason: 'Document identified as an Interim / Procedural Order rather than a final disposal.',
       },
       summary: 'Interim proceeding before Sessions Court. Final bail decision deferred pending medical reports.',
       keyIssues: ['Interim protection from arrest', 'Pending trial court records'],
       operativeOrderText: 'Interim protection granted until next date; listed for further hearing.',
+      orderType: 'Interim / Procedural Order',
     },
     overallStatus: 'Needs Review',
-    confidenceScore: 58,
+    confidenceScore: 62,
     authoritativeSourceChecked: false,
-    notes: 'Demo document intentionally demonstrating "Needs Review" status due to interim disposition.',
+    notes: 'Demo document intentionally demonstrating "Needs Review" status due to interim procedural disposition.',
   }
 ];

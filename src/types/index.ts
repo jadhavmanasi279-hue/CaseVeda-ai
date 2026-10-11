@@ -1,5 +1,6 @@
 export type VerificationStatus = 'Verified' | 'Needs Review' | 'Flagged';
 export type ComparisonStatus = 'Verified Match' | 'Mismatch Detected' | 'Unverified';
+export type OrderClassification = 'Final Judgment' | 'Interim / Procedural Order' | 'Indeterminate';
 
 export interface ExtractedField {
   value: string;
@@ -22,12 +23,26 @@ export interface CitedSection {
 }
 
 export interface ExtractedOutcome {
-  disposition: 'Appeal Allowed' | 'Appeal Dismissed' | 'Petition Allowed' | 'Petition Dismissed' | 'Bail Granted' | 'Bail Rejected' | 'Acquitted' | 'Conviction Upheld' | 'Remanded' | 'Disposed' | 'Needs Review';
+  disposition: 
+    | 'Appeal Allowed' 
+    | 'Appeal Dismissed' 
+    | 'Petition Allowed' 
+    | 'Petition Dismissed' 
+    | 'Bail Granted' 
+    | 'Bail Rejected' 
+    | 'Acquitted' 
+    | 'Conviction Upheld' 
+    | 'Remanded' 
+    | 'Order Modified'
+    | 'Disposed of'
+    | 'Interim Order / Stay Granted'
+    | 'Needs Review';
   verdictText: string;
   pageNumber: number;
   evidenceQuote: string;
   confidence: number;
   status: 'Verified' | 'Needs Review';
+  orderType: OrderClassification;
   reviewReason?: string;
 }
 
@@ -44,6 +59,9 @@ export interface CourtJudgment {
   pageCount: number;
   rawText: string;
   pages: PageContent[];
+  hasExtractableText: boolean;
+  ocrNotice?: string;
+  isDemo?: boolean;
   extractedData: {
     courtName: ExtractedField;
     caseType: ExtractedField;
@@ -57,6 +75,7 @@ export interface CourtJudgment {
     summary: string;
     keyIssues: string[];
     operativeOrderText: string;
+    orderType: OrderClassification;
   };
   overallStatus: VerificationStatus;
   confidenceScore: number;

@@ -1,4 +1,12 @@
-import { CourtJudgment, ExtractedField, CitedSection, ExtractedOutcome, PageContent, VerificationStatus } from '../types';
+import { 
+  CourtJudgment, 
+  ExtractedField, 
+  CitedSection, 
+  ExtractedOutcome, 
+  PageContent, 
+  VerificationStatus,
+  OrderClassification 
+} from '../types';
 
 // Statutory database for Indian law
 interface StatutoryRef {
@@ -118,6 +126,12 @@ const STATUTORY_KNOWLEDGE_BASE: StatutoryRef[] = [
     description: 'Offences by companies and vicarious liability of Directors.',
   },
   {
+    regex: /(?:Section|Sec\.?|S\.)\s*139\b.*?(?:Negotiable\s+Instruments\s+Act|NI\s+Act)\b|(?:Negotiable\s+Instruments\s+Act|NI\s+Act)\b.*?(?:Section|Sec\.?|S\.)\s*139\b/i,
+    act: 'Negotiable Instruments Act, 1881',
+    section: 'Section 139',
+    description: 'Presumption in favour of holder regarding legally enforceable debt.',
+  },
+  {
     regex: /(?:Section|Sec\.?|S\.)\s*34\b.*?(?:Arbitration\s+and\s+Conciliation\s+Act|Arbitration\s+Act)\b/i,
     act: 'Arbitration and Conciliation Act, 1996',
     section: 'Section 34',
@@ -144,20 +158,87 @@ const STATUTORY_KNOWLEDGE_BASE: StatutoryRef[] = [
 ];
 
 /**
- * Searches pages for an exact or approximate regex and returns the match and page number
+ * Validates whether quote exists in pageText after only safe whitespace normalization.
+ * Returns true only if it is an exact substring.
  */
-function findInPages(pages: PageContent[], regex: RegExp): { match: RegExpMatchArray; page: number; sentence: string } | null {
+export function validateEvidenceQuote(pageText: string, quote: string): boolean {
+  if (!pageText || !quote) return false;
+  const normPage = pageText.replace(/\s+/g, ' ').trim();
+  const normQuote = quote.replace(/\s+/g, ' ').trim();
+  return normPage.includes(normQuote);
+}
+
+/**
+ * Extracts a complete, natural sentence containing the match without arbitrary slicing or fake ellipsis.
+ * Ensures the returned quote is a direct substring of the page text.
+ */
+function extractCleanSentence(text: string, matchIndex: number, matchLength: number): string {
+  if (!text || matchIndex < 0) return '';
+
+  // Look backwards for sentence start (punctuation followed by whitespace/newline or start of paragraph)
+  let start = 0;
+  for (let i = matchIndex - 1; i >= 0; i--) {
+    const char = text[i];
+    if (char === '\n') {
+      start = i + 1;
+      break;
+    }
+    if ((char === '.' || char === '!' || char === '?') && i + 1 < matchIndex && /\s/.test(text[i + 1])) {
+      // Avoid breaking on abbreviations like "Mr.", "No.", "v.", "J.", "Ors.", "Anr."
+      const precedingWord = text.substring(Math.max(0, i - 6), i + 1);
+      if (!/\b(?:Mr|Ms|Dr|No|vs|v|J|CJI|Ors|Anr|Sec|Art|Hon'ble)\.$/i.test(precedingWord)) {
+        start = i + 1;
+        break;
+      }
+    }
+  }
+
+  // Look forward for sentence end
+  let end = text.length;
+  for (let i = matchIndex + matchLength; i < text.length; i++) {
+    const char = text[i];
+    if (char === '\n') {
+      end = i;
+      break;
+    }
+    if (char === '.' || char === '!' || char === '?') {
+      const precedingWord = text.substring(Math.max(0, i - 6), i + 1);
+      if (!/\b(?:Mr|Ms|Dr|No|vs|v|J|CJI|Ors|Anr|Sec|Art|Hon'ble)\.$/i.test(precedingWord)) {
+        end = i + 1;
+        break;
+      }
+    }
+  }
+
+  const rawSentence = text.substring(start, end).trim();
+
+  // Strip trailing signature lines, dots or dates if captured
+  const cleanSentence = rawSentence
+    .replace(/[._\-]{3,}.*$/g, '')
+    .replace(/\s*\[?(?:NEW\s+DELHI|MUMBAI|ALLAHABAD|KOLKATA|BOMBAY|DELHI|BENCH)[\s;:,].*$/i, '')
+    .trim();
+
+  // Validate that the sentence is a valid substring of text
+  if (text.includes(cleanSentence) && cleanSentence.length > 5) {
+    return cleanSentence;
+  }
+
+  // Fallback: exact match chunk without breaking words
+  const fallback = text.substring(matchIndex, Math.min(text.length, matchIndex + matchLength)).trim();
+  return fallback;
+}
+
+/**
+ * Searches pages for an exact regex and extracts a clean, validated sentence.
+ */
+function findInPagesClean(pages: PageContent[], regex: RegExp): { match: RegExpMatchArray; page: number; sentence: string } | null {
   for (const p of pages) {
     const match = p.text.match(regex);
-    if (match) {
-      // Find surrounding sentence
-      const index = match.index || 0;
-      const start = Math.max(0, index - 120);
-      const end = Math.min(p.text.length, index + match[0].length + 150);
-      let sentence = p.text.substring(start, end).trim();
-      if (start > 0) sentence = '...' + sentence;
-      if (end < p.text.length) sentence = sentence + '...';
-      return { match, page: p.pageNumber, sentence };
+    if (match && match.index !== undefined) {
+      const sentence = extractCleanSentence(p.text, match.index, match[0].length);
+      if (sentence && validateEvidenceQuote(p.text, sentence)) {
+        return { match, page: p.pageNumber, sentence };
+      }
     }
   }
   return null;
@@ -168,25 +249,25 @@ function findInPages(pages: PageContent[], regex: RegExp): { match: RegExpMatchA
  */
 function extractCourtName(pages: PageContent[]): ExtractedField {
   const frontPages = pages.slice(0, 2);
-  const frontText = frontPages.map(p => p.text).join(' ');
 
   const courtPatterns = [
-    { name: 'Supreme Court of India', regex: /(?:IN\s+THE\s+)?SUPREME\s+COURT\s+OF\s+INDIA/i },
-    { name: 'High Court of Judicature at Bombay', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+BOMBAY|BOMBAY\s+HIGH\s+COURT)/i },
-    { name: 'High Court of Delhi', regex: /(?:HIGH\s+COURT\s+OF\s+DELHI|DELHI\s+HIGH\s+COURT)/i },
-    { name: 'High Court of Judicature at Allahabad', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+ALLAHABAD|ALLAHABAD\s+HIGH\s+COURT)/i },
-    { name: 'High Court of Judicature at Madras', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+MADRAS|MADRAS\s+HIGH\s+COURT)/i },
-    { name: 'High Court at Calcutta', regex: /(?:HIGH\s+COURT\s+AT\s+CALCUTTA|CALCUTTA\s+HIGH\s+COURT)/i },
-    { name: 'High Court of Karnataka', regex: /(?:HIGH\s+COURT\s+OF\s+KARNATAKA|KARNATAKA\s+HIGH\s+COURT)/i },
-    { name: 'National Company Law Appellate Tribunal', regex: /NATIONAL\s+COMPANY\s+LAW\s+APPELLATE\s+TRIBUNAL|NCLAT/i },
+    { name: 'Supreme Court of India', regex: /(?:IN\s+THE\s+)?SUPREME\s+COURT\s+OF\s+INDIA\b/i },
+    { name: 'High Court of Judicature at Bombay', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+BOMBAY|BOMBAY\s+HIGH\s+COURT)\b/i },
+    { name: 'High Court of Delhi', regex: /(?:HIGH\s+COURT\s+OF\s+DELHI|DELHI\s+HIGH\s+COURT)\b/i },
+    { name: 'High Court of Judicature at Allahabad', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+ALLAHABAD|ALLAHABAD\s+HIGH\s+COURT)\b/i },
+    { name: 'High Court of Judicature at Madras', regex: /(?:HIGH\s+COURT\s+OF\s+JUDICATURE\s+AT\s+MADRAS|MADRAS\s+HIGH\s+COURT)\b/i },
+    { name: 'High Court at Calcutta', regex: /(?:HIGH\s+COURT\s+AT\s+CALCUTTA|CALCUTTA\s+HIGH\s+COURT)\b/i },
+    { name: 'High Court of Karnataka', regex: /(?:HIGH\s+COURT\s+OF\s+KARNATAKA|KARNATAKA\s+HIGH\s+COURT)\b/i },
+    { name: 'National Company Law Appellate Tribunal', regex: /(?:NATIONAL\s+COMPANY\s+LAW\s+APPELLATE\s+TRIBUNAL|NCLAT)\b/i },
+    { name: 'Court of Sessions / District Court', regex: /(?:IN\s+THE\s+COURT\s+OF\s+(?:ADDITIONAL\s+)?SESSIONS\s+JUDGE|DISTRICT\s+AND\s+SESSIONS\s+COURT)\b/i },
   ];
 
   for (const cp of courtPatterns) {
-    const found = findInPages(frontPages, cp.regex);
+    const found = findInPagesClean(frontPages, cp.regex);
     if (found) {
       return {
         value: cp.name,
-        confidence: 96,
+        confidence: 98,
         pageNumber: found.page,
         evidenceQuote: found.sentence,
         status: 'Verified',
@@ -194,26 +275,29 @@ function extractCourtName(pages: PageContent[]): ExtractedField {
     }
   }
 
-  // Fallback heuristic
-  const genericMatch = frontText.match(/(?:IN\s+THE\s+COURT\s+OF|BEFORE\s+THE\s+HON'BLE)\s+([A-Z\s,]{6,60})/i);
-  if (genericMatch) {
-    return {
-      value: genericMatch[1].trim(),
-      confidence: 65,
-      pageNumber: 1,
-      evidenceQuote: genericMatch[0],
-      status: 'Needs Review',
-      reviewReason: 'Court name extracted using generic heuristic. Verification against roster recommended.',
-    };
+  // Check front text for generic court heading
+  for (const p of frontPages) {
+    const genericMatch = p.text.match(/(?:IN\s+THE\s+COURT\s+OF|BEFORE\s+THE\s+HON'BLE)\s+([A-Z\s,]{6,70})/i);
+    if (genericMatch && genericMatch.index !== undefined) {
+      const sentence = extractCleanSentence(p.text, genericMatch.index, genericMatch[0].length);
+      return {
+        value: genericMatch[1].trim(),
+        confidence: 70,
+        pageNumber: p.pageNumber,
+        evidenceQuote: sentence,
+        status: 'Needs Review',
+        reviewReason: 'Court name extracted using generic title block; verification against registry roster advised.',
+      };
+    }
   }
 
   return {
-    value: 'Court Name Unspecified in Header',
-    confidence: 25,
+    value: 'Not detected in document header',
+    confidence: 0,
     pageNumber: null,
     evidenceQuote: null,
     status: 'Needs Review',
-    reviewReason: 'No formal Indian Court header detected on initial pages.',
+    reviewReason: 'No formal Indian Court header recognized on initial pages.',
   };
 }
 
@@ -231,11 +315,11 @@ function extractCaseDetails(pages: PageContent[]): { caseType: ExtractedField; c
     { type: 'Writ Petition (Civil)', regex: /WRIT\s+PETITION\s*\((?:CIVIL|C)\)\s*(?:NO(?:\.|S)?)?\s*([0-9\s/-]+)\s*(?:OF|\/)\s*([0-9]{4})|W\.?P\.?\s*\(C\)\s*NO\.?\s*([0-9\s/-]+)\/([0-9]{4})/i },
     { type: 'Writ Petition (Criminal)', regex: /WRIT\s+PETITION\s*\((?:CRL\.?|CRIMINAL)\)\s*(?:NO(?:\.|S)?)?\s*([0-9\s/-]+)\s*(?:OF|\/)\s*([0-9]{4})/i },
     { type: 'Bail Application', regex: /BAIL\s+APPLN\.?\s*(?:NO\.?)?\s*([0-9\s/-]+)\s*(?:OF|\/)\s*([0-9]{4})/i },
-    { type: 'Arbitration Petition', regex: /(?:ARB\.?\s*P\.?|ARBITRATION\s+PETITION)\s*(?:NO\.?)?\s*([0-9\s/-]+)\s*(?:OF|\/)\s*([0-9]{4})/i },
+    { type: 'Arbitration Petition', regex: /(?:ARB\.?\s*P\.?|ARBITRATION\s+PETITION|O\.M\.P\.\s*\(COMM\))\s*(?:NO\.?)?\s*([0-9\s/-]+)\s*(?:OF|\/)\s*([0-9]{4})/i },
   ];
 
   for (const cp of casePatterns) {
-    const found = findInPages(frontPages, cp.regex);
+    const found = findInPagesClean(frontPages, cp.regex);
     if (found) {
       const num = (found.match[1] || found.match[3] || '').trim().replace(/\s+/g, '');
       const yr = (found.match[2] || found.match[4] || '').trim();
@@ -244,14 +328,14 @@ function extractCaseDetails(pages: PageContent[]): { caseType: ExtractedField; c
       return {
         caseType: {
           value: cp.type,
-          confidence: 95,
+          confidence: 96,
           pageNumber: found.page,
           evidenceQuote: found.sentence,
           status: 'Verified',
         },
         caseNumber: {
           value: fullCaseNo,
-          confidence: 94,
+          confidence: 96,
           pageNumber: found.page,
           evidenceQuote: found.sentence,
           status: 'Verified',
@@ -267,48 +351,51 @@ function extractCaseDetails(pages: PageContent[]): { caseType: ExtractedField; c
     }
   }
 
-  // Broad generic match
-  const genericMatch = findInPages(frontPages, /(?:Case|Petition|Appeal|Reference)\s+No(?:\.|:)?\s*([A-Za-z0-9\s/().-]+(?:of|\/)\s*[0-9]{4})/i);
-  if (genericMatch) {
-    return {
-      caseType: {
-        value: 'Indian Court Proceeding (Unclassified)',
-        confidence: 60,
-        pageNumber: genericMatch.page,
-        evidenceQuote: genericMatch.sentence,
-        status: 'Needs Review',
-        reviewReason: 'Exact statutory classification category ambiguous.',
-      },
-      caseNumber: {
-        value: genericMatch.match[1].trim(),
-        confidence: 70,
-        pageNumber: genericMatch.page,
-        evidenceQuote: genericMatch.sentence,
-        status: 'Needs Review',
-        reviewReason: 'Extracted from non-standard title block.',
-      },
-      year: {
-        value: (genericMatch.match[1].match(/[0-9]{4}/)?.[0] || 'Unknown'),
-        confidence: 70,
-        pageNumber: genericMatch.page,
-        evidenceQuote: genericMatch.sentence,
-        status: 'Needs Review',
-      },
-    };
+  // Broad generic pattern
+  for (const p of frontPages) {
+    const genericMatch = p.text.match(/(?:Case|Petition|Appeal|Reference|O\.M\.P\.)\s+No(?:\.|:)?\s*([A-Za-z0-9\s/().-]+(?:of|\/)\s*[0-9]{4})/i);
+    if (genericMatch && genericMatch.index !== undefined) {
+      const sentence = extractCleanSentence(p.text, genericMatch.index, genericMatch[0].length);
+      const yr = genericMatch[1].match(/[0-9]{4}/)?.[0] || 'Unknown';
+      return {
+        caseType: {
+          value: 'Indian Court Proceeding',
+          confidence: 75,
+          pageNumber: p.pageNumber,
+          evidenceQuote: sentence,
+          status: 'Needs Review',
+          reviewReason: 'Case type classification extracted from non-standard title string.',
+        },
+        caseNumber: {
+          value: genericMatch[1].trim(),
+          confidence: 85,
+          pageNumber: p.pageNumber,
+          evidenceQuote: sentence,
+          status: 'Verified',
+        },
+        year: {
+          value: yr,
+          confidence: 85,
+          pageNumber: p.pageNumber,
+          evidenceQuote: sentence,
+          status: 'Verified',
+        },
+      };
+    }
   }
 
   return {
     caseType: {
-      value: 'Unidentified Case Type',
-      confidence: 30,
+      value: 'Not detected in document header',
+      confidence: 0,
       pageNumber: null,
       evidenceQuote: null,
       status: 'Needs Review',
-      reviewReason: 'Missing standard Case Type declaration.',
+      reviewReason: 'Missing standard Case Type declaration on initial pages.',
     },
     caseNumber: {
-      value: 'Not Formally Specified',
-      confidence: 25,
+      value: 'Not detected in document header',
+      confidence: 0,
       pageNumber: null,
       evidenceQuote: null,
       status: 'Needs Review',
@@ -316,7 +403,7 @@ function extractCaseDetails(pages: PageContent[]): { caseType: ExtractedField; c
     },
     year: {
       value: 'Unknown',
-      confidence: 20,
+      confidence: 0,
       pageNumber: null,
       evidenceQuote: null,
       status: 'Needs Review',
@@ -325,166 +412,301 @@ function extractCaseDetails(pages: PageContent[]): { caseType: ExtractedField; c
 }
 
 /**
- * Extracts Petitioner and Respondent
+ * Cleans party name string, removing legal role suffixes, dots and noise
+ */
+function cleanPartyString(str: string): string {
+  return str
+    .replace(/\s*(?:\.{3,}|_{3,})\s*(?:Appellant|Petitioner|Plaintiff|Applicant|Respondent|Defendant|Opposite\s+Party)(?:s|\(s\))?/gi, '')
+    .replace(/^(?:IN\s+THE\s+MATTER\s+OF\s*:?|BETWEEN\s*:?)/gi, '')
+    .replace(/[\n\r]+/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
+    .trim();
+}
+
+/**
+ * Extracts Litigating Parties (Petitioner / Appellant vs Respondent) from the cause title.
+ * Correctly extracts exact verbatim evidence lines from Page 1 and marks them Verified.
  */
 function extractParties(pages: PageContent[]): { petitioner: ExtractedField; respondent: ExtractedField } {
-  const frontPages = pages.slice(0, 2);
-  const frontText = frontPages.map(p => p.text).join(' ');
-
-  // Standard Indian pattern: Party A ... Appellant(s)/Petitioner(s) VERSUS Party B ... Respondent(s)
-  const versusMatch = frontText.match(/([\w\s.,'&()-]{3,120})\s+(?:\.{3,}|_{3,}|\s+)\s*(?:Appellant|Petitioner|Plaintiff|Applicant)(?:s|\(s\))?\s+(?:VERSUS|Vs\.?|V\/s)\s+([\w\s.,'&()-]{3,120})\s+(?:\.{3,}|_{3,}|\s+)\s*(?:Respondent|Defendant|Opposite\s+Party)(?:s|\(s\))?/i);
-
-  if (versusMatch) {
-    const rawPet = versusMatch[1].replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    const rawResp = versusMatch[2].replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-
-    const petPage = findInPages(frontPages, new RegExp(escapeRegex(rawPet.substring(0, 20)), 'i'))?.page || 1;
-    const respPage = findInPages(frontPages, new RegExp(escapeRegex(rawResp.substring(0, 20)), 'i'))?.page || 1;
-
+  const page1 = pages[0];
+  if (!page1 || !page1.text) {
     return {
       petitioner: {
-        value: cleanPartyName(rawPet),
-        confidence: 91,
-        pageNumber: petPage,
-        evidenceQuote: `Petitioner/Appellant recorded as: "${rawPet}" in title cause list.`,
-        status: 'Verified',
+        value: 'Not detected in document',
+        confidence: 0,
+        pageNumber: null,
+        evidenceQuote: null,
+        status: 'Needs Review',
+        reviewReason: 'Document lacks readable title page.',
       },
       respondent: {
-        value: cleanPartyName(rawResp),
-        confidence: 91,
-        pageNumber: respPage,
-        evidenceQuote: `Respondent recorded as: "${rawResp}" in title cause list.`,
-        status: 'Verified',
+        value: 'Not detected in document',
+        confidence: 0,
+        pageNumber: null,
+        evidenceQuote: null,
+        status: 'Needs Review',
+        reviewReason: 'Document lacks readable title page.',
       },
     };
   }
 
-  // Secondary versus split
-  const simpleVersus = frontText.match(/([A-Z0-9\s.,'&()-]{4,80})\s+(?:VERSUS|VS\.?|V\/S)\s+([A-Z0-9\s.,'&()-]{4,80})/i);
-  if (simpleVersus) {
-    const p = cleanPartyName(simpleVersus[1]);
-    const r = cleanPartyName(simpleVersus[2]);
-    return {
-      petitioner: {
-        value: p,
-        confidence: 72,
-        pageNumber: 1,
-        evidenceQuote: simpleVersus[0],
-        status: 'Needs Review',
-        reviewReason: 'Identified from simple VERSUS delimiter; verify full corporate or alias titles.',
-      },
-      respondent: {
-        value: r,
-        confidence: 72,
-        pageNumber: 1,
-        evidenceQuote: simpleVersus[0],
-        status: 'Needs Review',
-        reviewReason: 'Identified from simple VERSUS delimiter; verify respondents list.',
-      },
-    };
-  }
+  const text = page1.text;
 
-  return {
-    petitioner: {
-      value: 'Petitioner Details Not Readily Parsed',
-      confidence: 30,
-      pageNumber: null,
-      evidenceQuote: null,
-      status: 'Needs Review',
-      reviewReason: 'Unable to locate cause title block with Petitioner/Appellant label.',
-    },
-    respondent: {
-      value: 'Respondent Details Not Readily Parsed',
-      confidence: 30,
-      pageNumber: null,
-      evidenceQuote: null,
-      status: 'Needs Review',
-      reviewReason: 'Unable to locate cause title block with Respondent label.',
-    },
-  };
-}
+  // Pattern 1: Multi-line cause title with Appellant/Petitioner ... VERSUS ... Respondent
+  // E.g. "Rajesh Kumar Sharma & Ors. ... Appellant(s) VERSUS State of NCT of Delhi ... Respondent(s)"
+  const causeTitleRegex = /([A-Za-z0-9\s.,'&()-]{3,100})\s+(?:\.{3,}|_{3,}|\s+)\s*(?:Appellant|Petitioner|Plaintiff|Applicant)(?:s|\(s\))?\s+(?:VERSUS|Vs\.?|V\/s|v\.)\s+([A-Za-z0-9\s.,'&()-]{3,100})\s+(?:\.{3,}|_{3,}|\s+)\s*(?:Respondent|Defendant|Opposite\s+Party)(?:s|\(s\))?/i;
+  const match1 = text.match(causeTitleRegex);
 
-/**
- * Extracts Bench / Presiding Judges
- */
-function extractBench(pages: PageContent[]): ExtractedField {
-  const frontPages = pages.slice(0, 2);
+  if (match1 && match1.index !== undefined) {
+    const rawPet = cleanPartyString(match1[1]);
+    const rawResp = cleanPartyString(match1[2]);
 
-  const benchPatterns = [
-    /CORAM\s*:\s*([^\n\r]+)/i,
-    /HON'BLE\s+(?:MR\.|MS\.|JUSTICE|DR\.)\s+([A-Z\s.,&]+(?:\n[A-Z\s.,&]+)?)/i,
-    /BEFORE\s*:\s*([^\n\r]+)/i,
-  ];
+    // Use the actual exact cause title passage from page 1 as the quote
+    const exactSnippet = extractCleanSentence(text, match1.index, match1[0].length);
 
-  for (const pat of benchPatterns) {
-    const found = findInPages(frontPages, pat);
-    if (found) {
-      const benchStr = (found.match[1] || found.match[0]).replace(/\s+/g, ' ').trim();
+    if (rawPet.length > 2 && rawResp.length > 2) {
       return {
-        value: benchStr.substring(0, 100),
-        confidence: 88,
-        pageNumber: found.page,
-        evidenceQuote: found.sentence,
-        status: 'Verified',
+        petitioner: {
+          value: rawPet,
+          confidence: 96,
+          pageNumber: 1,
+          evidenceQuote: exactSnippet,
+          status: 'Verified',
+        },
+        respondent: {
+          value: rawResp,
+          confidence: 96,
+          pageNumber: 1,
+          evidenceQuote: exactSnippet,
+          status: 'Verified',
+        },
+      };
+    }
+  }
+
+  // Pattern 2: Standard VERSUS / VS delimiter on Cause Title
+  // E.g. "Vikramaditya @ Vicky V/s State of Uttar Pradesh" or "A.B.C. VERSUS X.Y.Z."
+  const versusRegex = /([A-Za-z0-9\s.,'&()@-]{3,90})\s+(?:VERSUS|Vs\.?|V\/s|v\.)\s+([A-Za-z0-9\s.,'&()@-]{3,90})/i;
+  const match2 = text.match(versusRegex);
+
+  if (match2 && match2.index !== undefined) {
+    const rawPet = cleanPartyString(match2[1]);
+    const rawResp = cleanPartyString(match2[2]);
+
+    // Ensure it didn't capture a procedural phrase
+    const isExcluded = /CORAM|JUDGMENT|HON'BLE|APPEAL|PETITION|ORDER/i.test(rawPet);
+
+    if (!isExcluded && rawPet.length > 2 && rawResp.length > 2) {
+      const exactSnippet = extractCleanSentence(text, match2.index, match2[0].length);
+      return {
+        petitioner: {
+          value: rawPet,
+          confidence: 92,
+          pageNumber: 1,
+          evidenceQuote: exactSnippet,
+          status: 'Verified',
+        },
+        respondent: {
+          value: rawResp,
+          confidence: 92,
+          pageNumber: 1,
+          evidenceQuote: exactSnippet,
+          status: 'Verified',
+        },
       };
     }
   }
 
   return {
-    value: 'Bench / Coram Not Explicitly Stated on Front Page',
-    confidence: 40,
-    pageNumber: null,
-    evidenceQuote: null,
-    status: 'Needs Review',
-    reviewReason: 'Judge designations not located in top Coram section.',
+    petitioner: {
+      value: 'Not detected in cause title',
+      confidence: 0,
+      pageNumber: null,
+      evidenceQuote: null,
+      status: 'Needs Review',
+      reviewReason: 'Unable to locate litigating appellant/petitioner name on title page.',
+    },
+    respondent: {
+      value: 'Not detected in cause title',
+      confidence: 0,
+      pageNumber: null,
+      evidenceQuote: null,
+      status: 'Needs Review',
+      reviewReason: 'Unable to locate litigating respondent name on title page.',
+    },
   };
 }
 
 /**
- * Scans all pages for cited Indian Acts and Sections
+ * Extracts Presiding Bench / Coram / Judges.
+ * Searches both header pages (CORAM / BEFORE) and concluding pages (Signature block)
+ * so that genuine Supreme Court & High Court judges are accurately identified and marked Verified.
+ */
+function extractBench(pages: PageContent[]): ExtractedField {
+  const frontPages = pages.slice(0, 2);
+  const judgesSet = new Set<string>();
+  let bestEvidencePage = 1;
+  let bestEvidenceQuote = '';
+
+  // 1. Check Header Pages for CORAM / BEFORE / BENCH
+  for (const p of frontPages) {
+    const coramMatch = p.text.match(/(?:CORAM|BEFORE|BENCH)\s*:\s*([^\n\r]+(?:\n[^\n\r]+)?)/i);
+    if (coramMatch && coramMatch.index !== undefined) {
+      const coramLine = coramMatch[1];
+      // Extract judge names after HON'BLE
+      const names = coramLine.matchAll(/HON'BLE\s+(?:MR\.|MS\.|SMT\.|DR\.)?\s*JUSTICE\s+([A-Za-z\s.,]+?)(?:,|AND|&|\n|$)/gi);
+      for (const m of names) {
+        const cleaned = m[1].replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (cleaned.length > 3 && !/AND|CORAM|BEFORE/i.test(cleaned)) {
+          judgesSet.add(`Hon'ble Justice ${cleaned}`);
+        }
+      }
+      if (judgesSet.size === 0) {
+        const cleanedLine = coramLine.replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        judgesSet.add(cleanedLine);
+      }
+      bestEvidencePage = p.pageNumber;
+      bestEvidenceQuote = extractCleanSentence(p.text, coramMatch.index, coramMatch[0].length);
+      break;
+    }
+  }
+
+  // 2. Check Header Pages for standalone HON'BLE JUSTICE lines
+  if (judgesSet.size === 0) {
+    for (const p of frontPages) {
+      const matches = p.text.matchAll(/HON'BLE\s+(?:MR\.|MS\.|SMT\.|DR\.)?\s*JUSTICE\s+([A-Za-z\s.,]+?)(?:\n|,|AND|&|$)/gi);
+      for (const m of matches) {
+        const cleaned = m[1].replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (cleaned.length > 3 && !/AND|CORAM|BEFORE/i.test(cleaned)) {
+          judgesSet.add(`Hon'ble Justice ${cleaned}`);
+          if (!bestEvidenceQuote && m.index !== undefined) {
+            bestEvidencePage = p.pageNumber;
+            bestEvidenceQuote = extractCleanSentence(p.text, m.index, m[0].length);
+          }
+        }
+      }
+      if (judgesSet.size > 0) break;
+    }
+  }
+
+  // 3. Check author line on page 1-2 (e.g., "[SANJAY KISHAN KAUL, J.]" or "SANJAY KISHAN KAUL, J.")
+  if (judgesSet.size === 0) {
+    for (const p of frontPages) {
+      const authorMatch = p.text.match(/\[?\s*([A-Za-z\s.,]+?),\s*(?:CJI|J\.)\s*\]?/);
+      if (authorMatch && authorMatch.index !== undefined) {
+        const name = authorMatch[1].replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (name.length > 3 && !/JUDGMENT|ORDER|COURT/i.test(name)) {
+          judgesSet.add(`Hon'ble Justice ${name}`);
+          bestEvidencePage = p.pageNumber;
+          bestEvidenceQuote = extractCleanSentence(p.text, authorMatch.index, authorMatch[0].length);
+          break;
+        }
+      }
+    }
+  }
+
+  // 4. Check concluding pages for signature blocks (Standard Indian Supreme Court ending)
+  // E.g. "................................................J. \n (SANJAY KISHAN KAUL)"
+  const lastPages = pages.slice(-2);
+  for (const p of lastPages) {
+    const sigMatches = p.text.matchAll(/(?:\.{3,}|_{3,}|\s+)\s*(?:CJI|J\.)\s*\n?\s*\(\s*([A-Za-z\s.,]+?)\s*\)/g);
+    for (const m of sigMatches) {
+      const name = m[1].replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim();
+      if (name.length > 3 && !/NEW\s+DELHI|OCTOBER|NOVEMBER|DECEMBER|JANUARY/i.test(name)) {
+        judgesSet.add(`Hon'ble Justice ${name}`);
+        if (!bestEvidenceQuote && m.index !== undefined) {
+          bestEvidencePage = p.pageNumber;
+          bestEvidenceQuote = extractCleanSentence(p.text, m.index, m[0].length);
+        }
+      }
+    }
+  }
+
+  if (judgesSet.size > 0) {
+    const benchStr = Array.from(judgesSet).join(', ');
+    const finalQuote = bestEvidenceQuote || `Presiding Coram identified on Page ${bestEvidencePage}`;
+    const isValid = validateEvidenceQuote(
+      pages.find(p => p.pageNumber === bestEvidencePage)?.text || '', 
+      finalQuote
+    );
+
+    return {
+      value: benchStr,
+      confidence: 95,
+      pageNumber: bestEvidencePage,
+      evidenceQuote: finalQuote,
+      status: isValid ? 'Verified' : 'Needs Review',
+      reviewReason: isValid ? undefined : 'Bench identified, but verbatim quote requires roster review.',
+    };
+  }
+
+  return {
+    value: 'Presiding Coram not explicitly stated',
+    confidence: 0,
+    pageNumber: null,
+    evidenceQuote: null,
+    status: 'Needs Review',
+    reviewReason: 'Judge designations omitted from title block and concluding signature lines.',
+  };
+}
+
+/**
+ * Scans pages for statutory provisions cited.
+ * Validates that quotes are exact substrings of the corresponding page text.
  */
 function extractActsAndSections(pages: PageContent[]): CitedSection[] {
   const cited: CitedSection[] = [];
   const seenKeys = new Set<string>();
 
-  // 1. Scan against curated knowledge base
+  // 1. Curated statutory knowledge base
   for (const item of STATUTORY_KNOWLEDGE_BASE) {
-    const found = findInPages(pages, item.regex);
-    if (found) {
-      const key = `${item.act}-${item.section}`;
-      if (!seenKeys.has(key)) {
-        seenKeys.add(key);
-        cited.push({
-          act: item.act,
-          section: item.section,
-          description: item.description,
-          pageNumber: found.page,
-          quote: found.sentence,
-          confidence: 94,
-          status: 'Verified',
-        });
+    for (const p of pages) {
+      const match = p.text.match(item.regex);
+      if (match && match.index !== undefined) {
+        const key = `${item.act}-${item.section}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          const cleanQuote = extractCleanSentence(p.text, match.index, match[0].length);
+          const isValid = validateEvidenceQuote(p.text, cleanQuote);
+
+          cited.push({
+            act: item.act,
+            section: item.section,
+            description: item.description,
+            pageNumber: p.pageNumber,
+            quote: cleanQuote,
+            confidence: 96,
+            status: isValid ? 'Verified' : 'Needs Review',
+          });
+        }
       }
     }
   }
 
-  // 2. Generic discovery of other Sections (e.g., Section 11 of Arbitration Act, Section 9 of CPC, etc.)
+  // 2. Generic section detection (e.g. Section 11 of Arbitration Act, Order 39 of CPC)
   for (const p of pages) {
     const secMatches = p.text.matchAll(/(?:Section|Sec\.?|Article|Art\.?)\s*([0-9]+[A-Z]?)\s*(?:of\s+the\s+)?([A-Za-z\s]{4,40}Act(?:,\s*[0-9]{4})?)/gi);
     for (const match of secMatches) {
-      const secNum = match[1];
-      const actTitle = match[2].trim();
-      const key = `${actTitle}-Sec${secNum}`;
-      if (!seenKeys.has(key) && cited.length < 8) {
-        seenKeys.add(key);
-        cited.push({
-          act: actTitle,
-          section: `Section ${secNum}`,
-          description: `Statutory provision cited in judgment text.`,
-          pageNumber: p.pageNumber,
-          quote: extractSurroundingQuote(p.text, match[0]),
-          confidence: 82,
-          status: 'Verified',
-        });
+      if (match.index !== undefined && cited.length < 8) {
+        const secNum = match[1];
+        const actTitle = match[2].trim();
+        const key = `${actTitle}-Sec${secNum}`;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          const cleanQuote = extractCleanSentence(p.text, match.index, match[0].length);
+          const isValid = validateEvidenceQuote(p.text, cleanQuote);
+
+          cited.push({
+            act: actTitle,
+            section: `Section ${secNum}`,
+            description: `Statutory section cited in the body of the court judgment.`,
+            pageNumber: p.pageNumber,
+            quote: cleanQuote,
+            confidence: 88,
+            status: isValid ? 'Verified' : 'Needs Review',
+          });
+        }
       }
     }
   }
@@ -493,103 +715,186 @@ function extractActsAndSections(pages: PageContent[]): CitedSection[] {
 }
 
 /**
- * Detects Final Outcome and Operative Disposition from concluding pages
+ * Robust extraction of the Final Operative Disposition / Outcome.
+ * Solves:
+ * 1. Checks concluding pages first (last 2-3 pages) to avoid earlier historical references.
+ * 2. Extracts complete, clean sentences without dotted gaps, judge names, or cut-offs.
+ * 3. Distinguishes Final Judgments from Interim/Procedural Orders.
+ * 4. Verifies exact substring match against page text.
  */
 function extractFinalOutcome(pages: PageContent[]): ExtractedOutcome {
-  // Outcomes are usually on the final 2 pages
-  const lastPages = pages.length > 2 ? pages.slice(-2) : pages;
+  if (pages.length === 0) {
+    return {
+      disposition: 'Needs Review',
+      verdictText: 'Document contains no readable pages.',
+      pageNumber: 1,
+      evidenceQuote: '',
+      confidence: 0,
+      status: 'Needs Review',
+      orderType: 'Indeterminate',
+      reviewReason: 'No pages available for outcome analysis.',
+    };
+  }
 
-  const outcomeRules: {
+  // Focus on the concluding pages (last 2 pages) where operative orders reside in Indian judgments
+  const concludingPages = pages.length > 2 ? pages.slice(-2) : pages;
+
+  interface OutcomeRule {
     disposition: ExtractedOutcome['disposition'];
     regex: RegExp;
     confidence: number;
-  }[] = [
+    orderType: OrderClassification;
+  }
+
+  const operativeRules: OutcomeRule[] = [
+    // Appeal Allowed
     {
       disposition: 'Appeal Allowed',
-      regex: /(?:the\s+)?appeal\s+is\s+allowed|appeals\s+are\s+allowed|conviction\s+is\s+set\s+aside|impugned\s+judgment\s+is\s+quashed\s+and\s+set\s+aside/i,
-      confidence: 95,
+      regex: /(?:In\s+the\s+result|Consequently|Accordingly|For\s+the\s+reasons\s+(?:aforesaid|stated|above)|In\s+view\s+of\s+the\s+above)[^.]{0,80}?(?:the\s+)?appeal\s+(?:is|stands)\s+(?:hereby\s+)?allowed\b|(?:the\s+)?appeal\s+(?:is|stands)\s+(?:hereby\s+)?allowed\b|conviction\s+is\s+(?:hereby\s+)?(?:quashed\s+and\s+)?set\s+aside\b/i,
+      confidence: 96,
+      orderType: 'Final Judgment',
     },
+    // Appeal Dismissed
     {
       disposition: 'Appeal Dismissed',
-      regex: /(?:the\s+)?appeal\s+is\s+dismissed|appeals\s+are\s+dismissed|we\s+find\s+no\s+merit\s+in\s+the\s+appeal|conviction\s+is\s+upheld/i,
-      confidence: 95,
+      regex: /(?:In\s+the\s+result|Consequently|Accordingly|For\s+the\s+reasons\s+(?:aforesaid|stated|above)|In\s+view\s+of\s+the\s+above)[^.]{0,80}?(?:the\s+)?appeal\s+(?:is|stands)\s+(?:hereby\s+)?dismissed\b|(?:the\s+)?appeal\s+(?:is|stands)\s+(?:hereby\s+)?dismissed\b|conviction\s+is\s+(?:hereby\s+)?upheld\b/i,
+      confidence: 96,
+      orderType: 'Final Judgment',
     },
+    // Bail Granted
     {
       disposition: 'Bail Granted',
-      regex: /(?:the\s+)?(?:applicant|appellant|accused)\s+(?:is|shall\s+be)\s+released\s+on\s+bail|bail\s+is\s+granted|application\s+for\s+bail\s+is\s+allowed/i,
+      regex: /(?:applicant|appellant|accused)\s+(?:is|shall\s+be)\s+released\s+on\s+bail\b|(?:the\s+)?application\s+for\s+bail\s+is\s+(?:hereby\s+)?allowed\b|bail\s+is\s+granted\b/i,
       confidence: 96,
+      orderType: 'Final Judgment',
     },
+    // Bail Rejected
     {
       disposition: 'Bail Rejected',
-      regex: /bail\s+application\s+is\s+rejected|plea\s+for\s+bail\s+is\s+dismissed|declined\s+to\s+grant\s+bail/i,
-      confidence: 94,
+      regex: /(?:application\s+for\s+bail|plea\s+for\s+bail|bail\s+application)\s+(?:is|stands)\s+(?:hereby\s+)?(?:rejected|dismissed)\b/i,
+      confidence: 96,
+      orderType: 'Final Judgment',
     },
+    // Petition Allowed
     {
       disposition: 'Petition Allowed',
-      regex: /(?:the\s+)?writ\s+petition\s+is\s+allowed|petition\s+stands\s+allowed|rule\s+is\s+made\s+absolute/i,
-      confidence: 92,
+      regex: /(?:the\s+)?(?:writ\s+)?petition\s+(?:is|stands)\s+(?:hereby\s+)?allowed\b|rule\s+is\s+made\s+absolute\b/i,
+      confidence: 94,
+      orderType: 'Final Judgment',
     },
+    // Petition Dismissed
     {
       disposition: 'Petition Dismissed',
-      regex: /(?:the\s+)?writ\s+petition\s+is\s+dismissed|petition\s+stands\s+dismissed|petition\s+is\s+devoid\s+of\s+merit/i,
-      confidence: 93,
+      regex: /(?:the\s+)?(?:writ\s+)?petition\s+(?:is|stands)\s+(?:hereby\s+)?dismissed\b|(?:Special\s+Leave\s+Petition|SLP)\s+is\s+dismissed\b/i,
+      confidence: 95,
+      orderType: 'Final Judgment',
     },
-    {
-      disposition: 'Remanded',
-      regex: /matter\s+is\s+remanded\s+back|remitted\s+to\s+the\s+(?:High\s+Court|trial\s+court)|remanded\s+for\s+fresh\s+consideration/i,
-      confidence: 91,
-    },
+    // Acquitted
     {
       disposition: 'Acquitted',
-      regex: /(?:the\s+)?appellant\s+is\s+acquitted|accused\s+is\s+acquitted\s+of\s+all\s+charges/i,
+      regex: /(?:appellant|accused)\s+(?:is|are)\s+acquitted\s+of\s+all\s+charges\b|(?:appellant|accused)\s+stands\s+acquitted\b/i,
       confidence: 96,
+      orderType: 'Final Judgment',
+    },
+    // Remanded
+    {
+      disposition: 'Remanded',
+      regex: /matter\s+is\s+remanded\s+back\b|(?:matter|case)\s+is\s+remitted\s+to\s+the\s+(?:High\s+Court|trial\s+court)\b/i,
+      confidence: 94,
+      orderType: 'Final Judgment',
+    },
+    // Order Modified
+    {
+      disposition: 'Order Modified',
+      regex: /impugned\s+order\s+is\s+modified\b|partly\s+allowed\b/i,
+      confidence: 92,
+      orderType: 'Final Judgment',
+    },
+    // Disposed of / Withdrawn / Infructuous
+    {
+      disposition: 'Disposed of',
+      regex: /(?:petition|appeal)\s+(?:stands|is)\s+disposed\s+of\b|dismissed\s+as\s+withdrawn\b|disposed\s+of\s+as\s+infructuous\b/i,
+      confidence: 92,
+      orderType: 'Final Judgment',
+    },
+    // Interim / Procedural Order
+    {
+      disposition: 'Interim Order / Stay Granted',
+      regex: /(?:interim\s+stay|interim\s+protection|no\s+coercive\s+steps|list\s+on\s+[0-9]{2}|arguments\s+heard\s+in\s+part|issue\s+notice)\b/i,
+      confidence: 88,
+      orderType: 'Interim / Procedural Order',
     },
   ];
 
-  for (const rule of outcomeRules) {
-    const found = findInPages(lastPages, rule.regex);
-    if (found) {
-      return {
-        disposition: rule.disposition,
-        verdictText: found.sentence,
-        pageNumber: found.page,
-        evidenceQuote: found.sentence,
-        confidence: rule.confidence,
-        status: 'Verified',
-      };
+  // 1. Scan concluding pages in reverse (last page first)
+  for (let i = concludingPages.length - 1; i >= 0; i--) {
+    const p = concludingPages[i];
+    for (const rule of operativeRules) {
+      const match = p.text.match(rule.regex);
+      if (match && match.index !== undefined) {
+        const sentence = extractCleanSentence(p.text, match.index, match[0].length);
+        const isSubstring = validateEvidenceQuote(p.text, sentence);
+
+        if (isSubstring) {
+          const isInterim = rule.orderType === 'Interim / Procedural Order';
+          return {
+            disposition: rule.disposition,
+            verdictText: sentence,
+            pageNumber: p.pageNumber,
+            evidenceQuote: sentence,
+            confidence: rule.confidence,
+            status: isInterim ? 'Needs Review' : 'Verified',
+            orderType: rule.orderType,
+            reviewReason: isInterim 
+              ? 'Document identified as an Interim / Procedural Order rather than a final disposal.' 
+              : undefined,
+          };
+        }
+      }
     }
   }
 
-  // Check entire document if not found in last 2 pages
-  for (const rule of outcomeRules) {
-    const found = findInPages(pages, rule.regex);
-    if (found) {
-      return {
-        disposition: rule.disposition,
-        verdictText: found.sentence,
-        pageNumber: found.page,
-        evidenceQuote: found.sentence,
-        confidence: rule.confidence - 10,
-        status: 'Needs Review',
-        reviewReason: 'Operative disposition identified outside customary concluding paragraphs.',
-      };
+  // 2. If not found in last 2 pages, check whole document carefully
+  for (let i = pages.length - 1; i >= 0; i--) {
+    const p = pages[i];
+    for (const rule of operativeRules) {
+      const match = p.text.match(rule.regex);
+      if (match && match.index !== undefined) {
+        const sentence = extractCleanSentence(p.text, match.index, match[0].length);
+        if (validateEvidenceQuote(p.text, sentence)) {
+          return {
+            disposition: rule.disposition,
+            verdictText: sentence,
+            pageNumber: p.pageNumber,
+            evidenceQuote: sentence,
+            confidence: 75,
+            status: 'Needs Review',
+            orderType: rule.orderType,
+            reviewReason: 'Operative ruling located outside customary concluding paragraphs. Verification required to ensure it is not discussing a lower court decision.',
+          };
+        }
+      }
     }
   }
 
-  // Ambiguous outcome
+  // 3. Ambiguous / Unstated
+  const lastPage = pages[pages.length - 1];
+  const fallbackQuote = lastPage ? lastPage.text.slice(-180).trim() : 'No text available';
+
   return {
     disposition: 'Needs Review',
-    verdictText: 'Operative disposition could not be unambiguously classified automatically.',
-    pageNumber: pages[pages.length - 1]?.pageNumber || 1,
-    evidenceQuote: pages[pages.length - 1]?.text.slice(-250) || 'No text snippet available.',
-    confidence: 40,
+    verdictText: 'Operative disposition could not be unambiguously verified from document text.',
+    pageNumber: lastPage?.pageNumber || 1,
+    evidenceQuote: fallbackQuote,
+    confidence: 30,
     status: 'Needs Review',
-    reviewReason: 'Operative order contains complex multi-part directions or settlement without standard dismissal/allowance keywords.',
+    orderType: 'Indeterminate',
+    reviewReason: 'Operative order lacks explicit final disposal keywords (Allowed/Dismissed/Disposed). Requires manual legal inspection.',
   };
 }
 
 /**
- * Generates an executive case brief summary
+ * Executive case brief summary
  */
 function generateCaseSummary(
   court: string,
@@ -599,19 +904,76 @@ function generateCaseSummary(
   outcome: ExtractedOutcome,
   acts: CitedSection[]
 ): string {
-  const sectionsList = acts.length > 0 ? acts.map(a => `${a.section} (${a.act})`).join(', ') : 'General provisions';
-  return `This matter before the ${court} involves a ${caseType} between ${petitioner} and ${respondent}. The key statutory provisions deliberated include ${sectionsList}. The Court disposed of the matter with the operative ruling: "${outcome.disposition}" based on evidence scrutinized in the judgment.`;
+  const sectionsList = acts.length > 0 
+    ? acts.map(a => `${a.section} (${a.act})`).join(', ') 
+    : 'General statutory provisions';
+  return `This matter before the ${court} involves a ${caseType} between ${petitioner} and ${respondent}. Key statutory provisions deliberated include ${sectionsList}. The Court rendered the operative ruling: "${outcome.disposition}" (${outcome.orderType}).`;
 }
 
 /**
- * Main analysis function that transforms extracted PDF text into structured CourtJudgment
+ * Main analysis function that parses document pages into a structured CourtJudgment.
  */
 export function analyzeJudgmentText(
   fileName: string,
   fileSize: number,
   pages: PageContent[],
-  rawText: string
+  rawText: string,
+  hasExtractableText: boolean = true,
+  ocrNotice?: string
 ): CourtJudgment {
+  // If no extractable text or scanned PDF, do not fabricate fields!
+  if (!hasExtractableText) {
+    const emptyField = (reason: string): ExtractedField => ({
+      value: 'Not extractable (OCR Required)',
+      confidence: 0,
+      pageNumber: null,
+      evidenceQuote: null,
+      status: 'Needs Review',
+      reviewReason: reason,
+    });
+
+    return {
+      id: `cv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      fileName,
+      fileSize,
+      analyzedAt: new Date().toISOString(),
+      pageCount: pages.length,
+      rawText: '',
+      pages,
+      hasExtractableText: false,
+      ocrNotice: ocrNotice || 'Scanned or image-only PDF. Digital text layer missing.',
+      extractedData: {
+        courtName: emptyField('Scanned document lacks digital text.'),
+        caseType: emptyField('Scanned document lacks digital text.'),
+        caseNumber: emptyField('Scanned document lacks digital text.'),
+        year: emptyField('Scanned document lacks digital text.'),
+        bench: emptyField('Scanned document lacks digital text.'),
+        petitioner: emptyField('Scanned document lacks digital text.'),
+        respondent: emptyField('Scanned document lacks digital text.'),
+        actsAndSections: [],
+        finalOutcome: {
+          disposition: 'Needs Review',
+          verdictText: 'Text unreadable without OCR.',
+          pageNumber: 1,
+          evidenceQuote: '',
+          confidence: 0,
+          status: 'Needs Review',
+          orderType: 'Indeterminate',
+          reviewReason: 'Cannot determine outcome from image-only document.',
+        },
+        summary: 'Document could not be analyzed because it lacks a digital text layer. OCR processing is required.',
+        keyIssues: ['OCR Required'],
+        operativeOrderText: '',
+        orderType: 'Indeterminate',
+      },
+      overallStatus: 'Needs Review',
+      confidenceScore: 0,
+      authoritativeSourceChecked: false,
+      notes: 'Scanned or image-only PDF detected.',
+    };
+  }
+
+  // Extract facts with clean sentence bounds and verification
   const courtName = extractCourtName(pages);
   const { caseType, caseNumber, year } = extractCaseDetails(pages);
   const { petitioner, respondent } = extractParties(pages);
@@ -619,18 +981,19 @@ export function analyzeJudgmentText(
   const actsAndSections = extractActsAndSections(pages);
   const finalOutcome = extractFinalOutcome(pages);
 
-  // Calculate overall confidence
-  const fields = [courtName, caseType, caseNumber, petitioner, respondent, bench];
-  const avgFieldConf = fields.reduce((acc, f) => acc + f.confidence, 0) / fields.length;
-  const overallConfidence = Math.round((avgFieldConf * 0.6) + (finalOutcome.confidence * 0.4));
+  // Overall status rule:
+  // All essential fields MUST be Verified for the document to be Verified.
+  const essentialFields = [courtName, caseNumber, petitioner, respondent];
+  const allEssentialsVerified = essentialFields.every(f => f.status === 'Verified') && finalOutcome.status === 'Verified';
+  const overallStatus: VerificationStatus = allEssentialsVerified ? 'Verified' : 'Needs Review';
 
-  // Determine overall status
-  const hasNeedsReview = fields.some(f => f.status === 'Needs Review') || finalOutcome.status === 'Needs Review';
-  const overallStatus: VerificationStatus = hasNeedsReview ? 'Needs Review' : 'Verified';
+  // Honest confidence score
+  const allFields = [courtName, caseType, caseNumber, bench, petitioner, respondent];
+  const avgFields = allFields.reduce((acc, f) => acc + f.confidence, 0) / allFields.length;
+  const confidenceScore = Math.round((avgFields * 0.6) + (finalOutcome.confidence * 0.4));
 
-  // Last page operative excerpt
   const lastPage = pages[pages.length - 1];
-  const operativeOrderText = lastPage ? lastPage.text.slice(-400).trim() : '';
+  const operativeOrderText = finalOutcome.verdictText || (lastPage ? lastPage.text.slice(-300).trim() : '');
 
   const summary = generateCaseSummary(
     courtName.value,
@@ -649,6 +1012,7 @@ export function analyzeJudgmentText(
     pageCount: pages.length,
     rawText,
     pages,
+    hasExtractableText: true,
     extractedData: {
       courtName,
       caseType,
@@ -661,38 +1025,16 @@ export function analyzeJudgmentText(
       finalOutcome,
       summary,
       keyIssues: [
-        `Applicability and interpretation of ${actsAndSections[0]?.section || 'invoked statutory provisions'}`,
-        `Scrutiny of procedural adherence and evidentiary chain of custody`,
-        `Admissibility of lower forum determinations and final disposition`,
+        `Evaluation of statutory provisions (${actsAndSections[0]?.section || 'invoked Acts'})`,
+        `Scrutiny of evidence and findings of lower forum`,
+        `Determination of final operative disposition (${finalOutcome.disposition})`,
       ],
       operativeOrderText,
+      orderType: finalOutcome.orderType,
     },
     overallStatus,
-    confidenceScore: overallConfidence,
-    authoritativeSourceChecked: false, // Never claim authentic without external registry check!
-    notes: 'Parsed by CaseVeda AI Evidence-Linked Legal Extraction Engine.',
+    confidenceScore,
+    authoritativeSourceChecked: false,
+    notes: 'Parsed via CaseVeda AI Evidence-Linked Extraction Engine.',
   };
-}
-
-// Helpers
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function cleanPartyName(str: string): string {
-  return str
-    .replace(/^[\s,.-]+|[\s,.-]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function extractSurroundingQuote(text: string, term: string): string {
-  const idx = text.indexOf(term);
-  if (idx === -1) return term;
-  const start = Math.max(0, idx - 80);
-  const end = Math.min(text.length, idx + term.length + 80);
-  let res = text.substring(start, end).trim();
-  if (start > 0) res = '...' + res;
-  if (end < text.length) res = res + '...';
-  return res;
 }
