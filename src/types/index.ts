@@ -1,6 +1,14 @@
 export type VerificationStatus = 'Verified' | 'Needs Review' | 'Flagged';
 export type ComparisonStatus = 'Verified Match' | 'Mismatch Detected' | 'Unverified';
 export type OrderClassification = 'Final Judgment' | 'Interim / Procedural Order' | 'Indeterminate';
+export type CasePriority = 'High' | 'Medium' | 'Low' | 'Undetermined';
+
+export interface PriorityClassification {
+  priority: CasePriority;
+  category: string;          // e.g. "Murder / Homicide", "Cheque Dishonour"
+  reason: string;            // Human-readable explanation of how the priority was determined
+  basedOnSections: string[]; // Acts/sections that drove the classification
+}
 
 export interface ExtractedField {
   value: string;
@@ -80,6 +88,7 @@ export interface CourtJudgment {
   overallStatus: VerificationStatus;
   confidenceScore: number;
   authoritativeSourceChecked: boolean;
+  priorityClassification: PriorityClassification;
   notes?: string;
 }
 

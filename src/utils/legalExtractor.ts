@@ -5,7 +5,9 @@ import {
   ExtractedOutcome, 
   PageContent, 
   VerificationStatus,
-  OrderClassification 
+  OrderClassification,
+  CasePriority,
+  PriorityClassification
 } from '../types';
 
 // Statutory database for Indian law
@@ -911,6 +913,206 @@ function generateCaseSummary(
 }
 
 /**
+ * Classifies the priority of a case based on:
+ * - Cited statutory sections (IPC 302, 376, etc. → High)
+ * - Case type keywords
+ * - Raw text indicators (deadlines, urgency, etc.)
+ * Returns a PriorityClassification with a transparent reason string.
+ */
+function classifyPriority(
+  rawText: string,
+  caseType: string,
+  actsAndSections: CitedSection[]
+): PriorityClassification {
+  const sectionKeys = actsAndSections.map(s => `${s.section} ${s.act}`.toLowerCase());
+  const textLower = rawText.toLowerCase();
+  const caseTypeLower = caseType.toLowerCase();
+
+  // Helper: check if any listed pattern appears in text
+  const textHas = (...terms: string[]) => terms.some(t => textLower.includes(t));
+  const caseIs = (...terms: string[]) => terms.some(t => caseTypeLower.includes(t));
+  const sectionHas = (...terms: string[]) => terms.some(t => sectionKeys.some(k => k.includes(t)));
+
+  // ─── HIGH PRIORITY ────────────────────────────────────────────────────────
+  // Murder / Homicide
+  if (
+    sectionHas('section 302', 'section 304') ||
+    textHas('murder', 'homicide', 'culpable homicide', 'killed', 'killing') ||
+    caseIs('murder')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /302|304/.test(s.section))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'High',
+      category: 'Murder / Homicide',
+      reason: 'Case involves charges of murder or culpable homicide under IPC. Such matters carry capital or life-imprisonment stakes and are classified as High Priority.',
+      basedOnSections: secs.length ? secs : ['IPC 302 / 304 (inferred from text)'],
+    };
+  }
+
+  // Rape / Serious Sexual Offence
+  if (
+    sectionHas('section 376', 'section 354', 'section 509', 'pocso') ||
+    textHas('rape', 'sexual assault', 'sexual offence', 'pocso', 'molestation')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /376|354|509/i.test(s.section) || /pocso/i.test(s.act))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'High',
+      category: 'Rape / Serious Sexual Offence',
+      reason: 'Case involves sexual assault or a serious sexual offence under IPC / POCSO. These matters are classified as High Priority due to severity and victim protection concerns.',
+      basedOnSections: secs.length ? secs : ['IPC 376 / POCSO (inferred from text)'],
+    };
+  }
+
+  // Serious Violent Crime (attempt to murder, dacoity, kidnapping, terrorism)
+  if (
+    sectionHas('section 307', 'section 395', 'section 364', 'section 392', 'uapa', 'ndps') ||
+    textHas('attempt to murder', 'dacoity', 'robbery', 'kidnapping', 'terrorism', 'ndps', 'narcotics', 'uapa')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /307|395|364|392/i.test(s.section) || /uapa|ndps/i.test(s.act))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'High',
+      category: 'Serious Violent / Organised Crime',
+      reason: 'Document cites provisions relating to serious violent crime, dacoity, kidnapping, or narcotics — matters with significant public-safety implications.',
+      basedOnSections: secs.length ? secs : ['Serious IPC / Special-Law provisions (inferred from text)'],
+    };
+  }
+
+  // Other criminal matters with immediate liberty implications (bail, custody)
+  const isCriminalBail = caseIs('criminal appeal', 'bail application', 'special leave petition (crl)') ||
+    textHas('custody', 'detention', 'bail application', 'anticipatory bail', 'habeas corpus');
+
+  if (isCriminalBail && sectionHas('section 302', 'section 376', 'section 307', 'section 395', 'section 364')) {
+    return {
+      priority: 'High',
+      category: 'Criminal Liberty Matter (Serious Offence)',
+      reason: 'Criminal case involving bail or liberty on a serious charge. High Priority due to personal liberty and public-safety considerations.',
+      basedOnSections: actsAndSections.filter(s => /302|376|307|395|364/i.test(s.section)).map(s => `${s.section} (${s.act})`),
+    };
+  }
+
+  // Imminent deadline / urgent enforcement detected in text
+  if (textHas('within 24 hours', 'within 48 hours', 'forthwith', 'immediately release', 'urgent', 'emergency')) {
+    return {
+      priority: 'High',
+      category: 'Urgent / Imminent Deadline',
+      reason: 'Document contains explicit urgency language (e.g., "within 24/48 hours", "forthwith", "urgent"). Classified as High Priority.',
+      basedOnSections: [],
+    };
+  }
+
+  // ─── MEDIUM PRIORITY ──────────────────────────────────────────────────────
+  // General criminal matters without life-threatening charges
+  if (
+    caseIs('criminal appeal', 'bail application', 'special leave petition (crl)', 'writ petition (criminal)') ||
+    sectionHas('section 498a', 'section 420', 'section 120b', 'section 406') ||
+    textHas('cheating', 'criminal conspiracy', 'fraud', 'dowry harassment', 'cruelty', 'abetment')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /498a|420|120b|406/i.test(s.section))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'Medium',
+      category: 'Criminal Matter (Non-violent)',
+      reason: 'Case involves criminal charges of a non-violent or economic nature (e.g., cheating, dowry harassment, criminal breach of trust).',
+      basedOnSections: secs,
+    };
+  }
+
+  // Constitutional / Fundamental Rights writ matters
+  if (
+    sectionHas('article 226', 'article 32', 'article 21') ||
+    textHas('fundamental right', 'writ of mandamus', 'writ of certiorari', 'writ of prohibition', 'public interest')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /article 226|article 32|article 21/i.test(s.section))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'Medium',
+      category: 'Constitutional / Writ Matter',
+      reason: 'Matter involves enforcement of constitutional or fundamental rights under Article 21, 32, or 226. Classified Medium unless additional urgency is detected.',
+      basedOnSections: secs,
+    };
+  }
+
+  // Significant commercial / arbitration dispute
+  if (
+    sectionHas('section 34', 'section 9', 'section 37') && textHas('arbitrat') ||
+    textHas('commercial dispute', 'arbitration award', 'specific performance', 'injunction') ||
+    caseIs('arbitration petition')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /arbitration/i.test(s.act))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'Medium',
+      category: 'Commercial / Arbitration Dispute',
+      reason: 'Matter relates to a significant commercial dispute or challenge to an arbitration award.',
+      basedOnSections: secs,
+    };
+  }
+
+  // ─── LOW PRIORITY ─────────────────────────────────────────────────────────
+  // Cheque dishonour (NI Act 138) — routine, high volume
+  if (
+    sectionHas('section 138', 'section 141', 'section 139') ||
+    textHas('cheque dishonour', 'dishonour of cheque', 'negotiable instruments')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /138|141|139/i.test(s.section) && /negotiable instruments/i.test(s.act))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'Low',
+      category: 'Cheque Dishonour (NI Act)',
+      reason: 'Case concerns dishonour of cheque under NI Act — a routine, high-volume civil-criminal matter without urgent liberty implications.',
+      basedOnSections: secs,
+    };
+  }
+
+  // Routine civil / family dispute
+  if (
+    caseIs('civil appeal', 'writ petition (civil)') &&
+    textHas('property', 'succession', 'inheritance', 'partition', 'divorce', 'maintenance', 'custody', 'matrimonial')
+  ) {
+    return {
+      priority: 'Low',
+      category: 'Routine Civil / Family Dispute',
+      reason: 'Matter appears to be a routine civil or family dispute (property, succession, matrimonial) without indicators of urgency or criminal liability.',
+      basedOnSections: [],
+    };
+  }
+
+  // Minor theft / routine property offence
+  if (
+    sectionHas('section 379', 'section 380') ||
+    textHas('petty theft', 'minor theft')
+  ) {
+    const secs = actsAndSections
+      .filter(s => /379|380/i.test(s.section))
+      .map(s => `${s.section} (${s.act})`);
+    return {
+      priority: 'Low',
+      category: 'Minor Theft / Property Offence',
+      reason: 'Case involves minor theft or property offence without aggravating factors. Classified as Low Priority.',
+      basedOnSections: secs,
+    };
+  }
+
+  // ─── UNDETERMINED ─────────────────────────────────────────────────────────
+  return {
+    priority: 'Undetermined',
+    category: 'Unclassified',
+    reason: 'Insufficient statutory or contextual information was detected in the document to assign an automated priority. Manual review by a legal professional is required.',
+    basedOnSections: [],
+  };
+}
+
+/**
  * Main analysis function that parses document pages into a structured CourtJudgment.
  */
 export function analyzeJudgmentText(
@@ -969,6 +1171,12 @@ export function analyzeJudgmentText(
       overallStatus: 'Needs Review',
       confidenceScore: 0,
       authoritativeSourceChecked: false,
+      priorityClassification: {
+        priority: 'Undetermined',
+        category: 'Unclassified',
+        reason: 'Document is a scanned / image-only PDF. Text extraction is not possible without OCR, so automated priority classification cannot be performed.',
+        basedOnSections: [],
+      },
       notes: 'Scanned or image-only PDF detected.',
     };
   }
@@ -980,6 +1188,7 @@ export function analyzeJudgmentText(
   const bench = extractBench(pages);
   const actsAndSections = extractActsAndSections(pages);
   const finalOutcome = extractFinalOutcome(pages);
+  const priorityClassification = classifyPriority(rawText, caseType.value, actsAndSections);
 
   // Overall status rule:
   // All essential fields MUST be Verified for the document to be Verified.
@@ -1035,6 +1244,7 @@ export function analyzeJudgmentText(
     overallStatus,
     confidenceScore,
     authoritativeSourceChecked: false,
+    priorityClassification,
     notes: 'Parsed via CaseVeda AI Evidence-Linked Extraction Engine.',
   };
 }

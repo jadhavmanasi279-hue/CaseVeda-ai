@@ -175,6 +175,12 @@ OCTOBER 09, 2023.`
     overallStatus: 'Verified',
     confidenceScore: 96,
     authoritativeSourceChecked: false,
+    priorityClassification: {
+  priority: 'Medium',
+  category: 'Commercial Arbitration',
+  reason: 'Demo priority for routine case review.',
+  basedOnSections: [],
+},
     notes: 'Demonstration Benchmark Landmark Judgment (Supreme Court of India).',
   },
   {
@@ -305,6 +311,15 @@ OCTOBER 10, 2024.`
     overallStatus: 'Verified',
     confidenceScore: 95,
     authoritativeSourceChecked: false,
+    priorityClassification: {
+  priority: 'High',
+  category: 'Document Mismatch Review',
+  reason: 'Demo document flagged for discrepancy review.',
+  basedOnSections: [],
+},
+    
+
+ 
     notes: 'Commercial division arbitration petition ruling.',
   },
   {
@@ -416,6 +431,12 @@ HON'BLE MR. JUSTICE ABHAY S. OKA`
     overallStatus: 'Verified',
     confidenceScore: 92,
     authoritativeSourceChecked: false,
+    priorityClassification: {
+  priority: 'Medium',
+  category: 'Cheque Dishonour',
+  reason: 'Demo priority for case review.',
+  basedOnSections: [],
+},
     notes: 'Demo test document for verifying Mismatch Detection in comparison mode.',
   },
   {
@@ -549,6 +570,13 @@ OCTOBER 08, 2023.`
     overallStatus: 'Verified',
     confidenceScore: 95,
     authoritativeSourceChecked: false,
+    priorityClassification: {
+  priority: 'Medium',
+  category: 'Bail Petition',
+  reason: 'Priority is provisional; document needs review.',
+  basedOnSections: [],
+},
+    
     notes: 'Negotiable Instruments Act cheque dishonour appeal benchmark.',
   },
   {
@@ -646,6 +674,12 @@ State of Uttar Pradesh`
     overallStatus: 'Needs Review',
     confidenceScore: 62,
     authoritativeSourceChecked: false,
+    priorityClassification: {
+  priority: 'Medium',
+  category: 'Bail Petition',
+  reason: 'Priority is provisional; document needs review.',
+  basedOnSections: [],
+},
     notes: 'Demo document intentionally demonstrating "Needs Review" status due to interim procedural disposition.',
   }
 ];
